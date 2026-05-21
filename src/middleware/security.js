@@ -59,12 +59,31 @@ const authLimiter = rateLimit({
 
 // ─── CORS ─────────────────────────────────────────────
 // Controls which frontend origins can call the API
-// Development: allow all origins
-// Production:  restrict to your actual frontend URL
+// In production we allow both the Vercel URL and
+// any custom domain the client sets up
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? process.env.APP_URL  // Only your frontend in production
-    : '*',                 // All origins in development
+  // Allow multiple origins in production
+  origin: (origin, callback) => {
+    // In development allow everything
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+
+    // In production allow requests from:
+    // 1. The APP_URL environment variable (Vercel URL)
+    // 2. No origin (server-to-server requests like Postman)
+    const allowedOrigins = [
+      process.env.APP_URL,
+      // Add your custom domain here later
+      // 'https://leavesync.co.za',
+    ].filter(Boolean); // Remove any undefined values
+
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   methods:        ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials:    true,

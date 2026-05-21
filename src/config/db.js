@@ -1,44 +1,60 @@
-// Load environment variables from the .env file
-require('dotenv').config();
+// ─── DATABASE CONFIGURATION ───────────────────────────
+// Supports both local development and Railway production
+//
+// Local development:
+//   Uses individual DB_HOST, DB_PORT etc. from .env
+//
+// Railway production:
+//   Uses DATABASE_URL which Railway provides automatically
+//   Format: postgresql://user:password@host:port/dbname
+//
+// The Pool automatically manages connections so we do not
+// need to open and close connections manually
 
-// Import the PostgreSQL library
+require('dotenv').config();
 const { Pool } = require('pg');
 
-// ─── CREATE CONNECTION POOL ───────────────────────────
-// A pool keeps several database connections open and reuses them
-// This is much faster than opening a new connection on every request
-const pool = new Pool({
-  host:     process.env.DB_HOST,      // Database server address
-  port:     process.env.DB_PORT,      // PostgreSQL port (default 5432)
-  database: process.env.DB_NAME,      // Database name
-  user:     process.env.DB_USER,      // Database username
-  password: process.env.DB_PASSWORD,  // Database password
-});
+// ─── BUILD POOL CONFIG ────────────────────────────────
+// If DATABASE_URL exists (Railway) use it directly
+// Otherwise build config from individual variables (local)
+const poolConfig = process.env.DATABASE_URL
+  ? {
+      // Railway production — use the full connection string
+      connectionString: process.env.DATABASE_URL,
+      // Railway requires SSL in production
+      // rejectUnauthorized: false allows self-signed certs
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    }
+  : {
+      // Local development — use individual variables
+      host:     process.env.DB_HOST,
+      port:     process.env.DB_PORT,
+      database: process.env.DB_NAME,
+      user:     process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+    };
 
-// ─── CONNECTION EVENTS ────────────────────────────────
-// Fires once when the pool successfully connects to the database
+// Create the connection pool with the correct config
+const pool = new Pool(poolConfig);
+
+// Log connection status on startup
 pool.on('connect', () => {
   console.log('✅ Connected to PostgreSQL database');
 });
 
-// Fires if the pool hits an unexpected error
-// We exit the process because the app cannot work without a database
+// Log and exit if the pool hits a fatal error
 pool.on('error', (err) => {
   console.error('❌ Unexpected database error:', err.message);
   process.exit(1);
 });
 
-// ─── QUERY HELPER ─────────────────────────────────────
-// A shortcut function to run a SQL query
-// Example: query('SELECT * FROM users WHERE id = $1', [userId])
-// We use $1, $2 placeholders (never string concatenation) to prevent SQL injection
+// Helper to run a SQL query
+// Uses $1, $2 placeholders to prevent SQL injection
 const query = (text, params) => pool.query(text, params);
 
-// ─── TRANSACTION HELPER ───────────────────────────────
-// Returns a dedicated client for multi-step transactions
-// Example: creating a company AND a user at the same time
-// If one step fails, we can roll back both — keeping data clean
+// Helper to get a dedicated client for transactions
 const getClient = () => pool.connect();
 
-// Export so other files in the project can use these helpers
 module.exports = { query, getClient, pool };
