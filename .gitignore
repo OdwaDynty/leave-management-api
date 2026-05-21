@@ -1,0 +1,24 @@
+# Dependencies — never commit node_modules
+node_modules/
+
+# Environment variables — contains passwords and secrets
+.env
+
+# Windows system files
+Thumbs.db
+desktop.ini
+Desktop.ini
+
+# VS Code settings
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+
+# Build output
+dist/
+build/
