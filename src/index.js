@@ -44,6 +44,16 @@ const companyRoutes = require('./routes/companyRoutes');
 
 // ─── INITIALISE EXPRESS ───────────────────────────────
 const app  = express();
+
+// Trust the first proxy in front of the app
+// Required on Render, Railway, Heroku and similar platforms
+// These platforms sit behind a load balancer that adds
+// the X-Forwarded-For header — we must tell Express
+// to trust it so rate limiting works correctly
+// '1' means trust exactly one proxy level
+app.set('trust proxy', 1);
+
+
 const PORT = process.env.PORT || 3000;
 
 // ─── SECURITY MIDDLEWARE ──────────────────────────────
