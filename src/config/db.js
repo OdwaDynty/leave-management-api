@@ -1,60 +1,88 @@
 // ─── DATABASE CONFIGURATION ───────────────────────────
-// Supports both local development and Railway production
+// This file sets up the connection pool to PostgreSQL
 //
-// Local development:
-//   Uses individual DB_HOST, DB_PORT etc. from .env
+// A connection pool keeps multiple database connections
+// open and ready — this is much faster than opening a
+// new connection for every API request
 //
-// Railway production:
-//   Uses DATABASE_URL which Railway provides automatically
-//   Format: postgresql://user:password@host:port/dbname
+// Supports three environments:
+//   Local development → uses individual DB_ variables
+//   Render            → uses DATABASE_URL from Render
+//   Supabase          → uses DATABASE_URL from Supabase
 //
-// The Pool automatically manages connections so we do not
-// need to open and close connections manually
+// Both Render and Supabase provide DATABASE_URL
+// automatically so we do not need to change this file
+// when switching between them
 
 require('dotenv').config();
 const { Pool } = require('pg');
 
-// ─── BUILD POOL CONFIG ────────────────────────────────
-// If DATABASE_URL exists (Railway) use it directly
-// Otherwise build config from individual variables (local)
-const poolConfig = process.env.DATABASE_URL
-  ? {
-      // Railway production — use the full connection string
-      connectionString: process.env.DATABASE_URL,
-      // Railway requires SSL in production
-      // rejectUnauthorized: false allows self-signed certs
-      ssl: {
-        rejectUnauthorized: false,
-      },
-    }
-  : {
-      // Local development — use individual variables
-      host:     process.env.DB_HOST,
-      port:     process.env.DB_PORT,
-      database: process.env.DB_NAME,
-      user:     process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-    };
+// ─── DECIDE WHICH CONFIG TO USE ───────────────────────
+// If DATABASE_URL exists use it — this is set automatically
+// by both Render and Supabase
+// If it does not exist fall back to individual variables
+// for local development
+let poolConfig;
 
-// Create the connection pool with the correct config
+if (process.env.DATABASE_URL) {
+  // ── Production / Supabase ─────────────────────────
+  // Supabase and most cloud databases require SSL
+  // rejectUnauthorized: false allows self-signed
+  // certificates which cloud providers use
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
+    // Connection pool size settings
+    // max: maximum number of connections to keep open
+    // idleTimeoutMillis: close idle connections after 30s
+    // connectionTimeoutMillis: fail if no connection in 2s
+    max:                    10,
+    idleTimeoutMillis:      30000,
+    connectionTimeoutMillis:2000,
+  };
+} else {
+  // ── Local Development ─────────────────────────────
+  // No SSL needed for local PostgreSQL
+  poolConfig = {
+    host:     process.env.DB_HOST     || 'localhost',
+    port:     parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME     || 'leave_management',
+    user:     process.env.DB_USER     || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+  };
+}
+
+// ─── CREATE THE CONNECTION POOL ───────────────────────
 const pool = new Pool(poolConfig);
 
-// Log connection status on startup
+// ─── LOG CONNECTION STATUS ────────────────────────────
+// This fires once when the first query is made
 pool.on('connect', () => {
   console.log('✅ Connected to PostgreSQL database');
 });
 
-// Log and exit if the pool hits a fatal error
+// ─── LOG POOL ERRORS ──────────────────────────────────
+// This fires if a connection in the pool unexpectedly
+// drops — we log the error but do not exit the process
+// because the pool will automatically reconnect
 pool.on('error', (err) => {
-  console.error('❌ Unexpected database error:', err.message);
-  process.exit(1);
+  console.error('❌ Database pool error:', err.message);
 });
 
-// Helper to run a SQL query
-// Uses $1, $2 placeholders to prevent SQL injection
+// ─── QUERY HELPER ────────────────────────────────────
+// Runs a SQL query using a connection from the pool
+// text   = the SQL string with $1, $2 placeholders
+// params = the values to replace $1, $2 etc.
+// Using placeholders prevents SQL injection attacks
 const query = (text, params) => pool.query(text, params);
 
-// Helper to get a dedicated client for transactions
+// ─── CLIENT HELPER ────────────────────────────────────
+// Gets a dedicated connection for transactions
+// Used when we need to run multiple queries atomically
+// e.g. debit balance AND update request in one transaction
+// Always call client.release() when done
 const getClient = () => pool.connect();
 
 module.exports = { query, getClient, pool };
