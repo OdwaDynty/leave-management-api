@@ -2,32 +2,33 @@
 
 > Enterprise Leave Management SaaS — Backend REST API
 
-A production-ready multi-tenant leave management API built with Node.js, Express, and PostgreSQL. Powers the LeaveSync platform which enables South African companies to manage employee leave requests, approvals, balances, policies, and compliance reporting.
+A production-ready, multi-tenant leave management REST API built for South African companies. Powers the LeaveSync platform which enables organisations to manage employee leave requests, approvals, balances, policies, and compliance reporting.
 
 ---
 
 ## 🚀 Live Demo
 
-- **API Base URL:** Coming soon
-- **Frontend App:** Coming soon
-- **API Documentation:** `GET /api` after running locally
+- **Frontend App:** https://leave-management-frontend-beige.vercel.app
+- **API Health Check:** https://leavesync-api.onrender.com/api/health
+- **API Base URL:** https://leavesync-api.onrender.com/api
 
 ---
 
 ## ✨ Features
 
-- 🔐 **JWT Authentication** with role-based access control
-- 👥 **Multi-tenant Architecture** — each company is fully isolated
+- 🔐 **JWT Authentication** with role-based access control (4 roles)
+- 🏢 **Multi-tenant Architecture** — every company is fully isolated
 - 📋 **Leave Management** — submit, approve, reject, cancel requests
 - ⚖️ **Multi-Level Approvals** — manager approval + HR sign-off for long leave
-- 📊 **Reports & Analytics** — absenteeism, team overview, monthly trends
-- 🔔 **Email Notifications** — branded HTML emails via Nodemailer/Gmail
-- 🗓️ **Public Holiday Engine** — SA holidays auto-seeded, excludes from leave counts
-- 📜 **Audit Trail** — full POPIA-compliant log of all sensitive actions
+- 📊 **Reports and Analytics** — absenteeism, team overview, monthly trends
+- 🔔 **Email Notifications** — branded HTML emails via Nodemailer
+- 🗓️ **Public Holiday Engine** — South African holidays, excludes from leave counts
+- 📜 **Audit Trail** — POPIA-compliant log of all sensitive actions
 - 🏆 **Role Requests** — self-service promotion workflow with HR approval
 - 📐 **Leave Policies** — role-based entitlements with auto-assignment
-- 🔑 **Forgot Password** — secure token-based reset via email
+- 🔑 **Forgot Password** — secure token-based reset via email link
 - 🏢 **Company Settings** — multi-tenant profile management
+- 💳 **PayFast Billing** — South African subscription payment integration
 
 ---
 
@@ -35,9 +36,9 @@ A production-ready multi-tenant leave management API built with Node.js, Express
 
 | Layer | Technology |
 |---|---|
-| Runtime | Node.js v24 |
+| Runtime | Node.js 20.x |
 | Framework | Express.js |
-| Database | PostgreSQL 18 |
+| Database | PostgreSQL (Supabase) |
 | Authentication | JWT (jsonwebtoken) |
 | Password Hashing | bcryptjs (12 salt rounds) |
 | Email | Nodemailer + Gmail SMTP |
@@ -50,7 +51,7 @@ A production-ready multi-tenant leave management API built with Node.js, Express
 ## 📁 Project Structure
 
 leave-management-api/
-├── migrations/              # SQL migration files
+├── migrations/
 │   ├── 001_create_companies.sql
 │   ├── 002_create_users.sql
 │   ├── 003_create_leave_types.sql
@@ -63,12 +64,13 @@ leave-management-api/
 │   ├── 010_create_role_requests.sql
 │   ├── 011_update_leave_requests_multi_approval.sql
 │   ├── 012_add_password_reset_tokens.sql
+│   ├── 013_create_subscriptions.sql
 │   └── run.js
 ├── src/
 │   ├── config/
-│   │   ├── db.js            # PostgreSQL connection pool
-│   │   └── email.js         # Nodemailer transporter
-│   ├── controllers/         # Business logic per feature
+│   │   ├── db.js
+│   │   └── email.js
+│   ├── controllers/
 │   │   ├── authController.js
 │   │   ├── employeeController.js
 │   │   ├── leaveTypeController.js
@@ -80,22 +82,37 @@ leave-management-api/
 │   │   ├── auditController.js
 │   │   ├── leavePolicyController.js
 │   │   ├── roleRequestController.js
-│   │   └── companyController.js
+│   │   ├── companyController.js
+│   │   └── billingController.js
 │   ├── middleware/
-│   │   ├── auth.js          # JWT verify + role guard
-│   │   ├── errorHandler.js  # Global error handler
-│   │   ├── requestLogger.js # Morgan HTTP logger
-│   │   └── security.js      # Helmet + rate limiting
-│   ├── routes/              # Express route definitions
+│   │   ├── auth.js
+│   │   ├── errorHandler.js
+│   │   ├── planLimits.js
+│   │   └── security.js
+│   ├── routes/
+│   │   ├── authRoutes.js
+│   │   ├── employeeRoutes.js
+│   │   ├── leaveTypeRoutes.js
+│   │   ├── leaveBalanceRoutes.js
+│   │   ├── leaveRequestRoutes.js
+│   │   ├── notificationRoutes.js
+│   │   ├── reportRoutes.js
+│   │   ├── publicHolidayRoutes.js
+│   │   ├── auditRoutes.js
+│   │   ├── leavePolicyRoutes.js
+│   │   ├── roleRequestRoutes.js
+│   │   ├── companyRoutes.js
+│   │   └── billingRoutes.js
 │   ├── utils/
-│   │   ├── auditLogger.js   # Audit trail writer
-│   │   ├── emailService.js  # Email sending functions
-│   │   ├── emailTemplates.js# HTML email templates
-│   │   └── jwt.js           # Token helpers
-│   └── index.js             # App entry point
-├── .env.example             # Environment variable template
+│   │   ├── auditLogger.js
+│   │   ├── emailService.js
+│   │   ├── emailTemplates.js
+│   │   └── jwt.js
+│   └── index.js
+├── .env.example
 ├── .gitignore
 ├── package.json
+├── Procfile
 └── README.md
 
 ---
@@ -104,147 +121,140 @@ leave-management-api/
 
 ### Prerequisites
 
-- Node.js v18 or higher
-- PostgreSQL 15 or higher
-- A Gmail account with App Password enabled
+- Node.js 20.x or higher
+- PostgreSQL database (we use Supabase)
+- Gmail account with App Password
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/leave-management-api.git
+git clone https://github.com/OdwaDynty/leave-management-api.git
 
 # Navigate into the project
 cd leave-management-api
 
-# Install all dependencies
+# Install dependencies
 npm install
 
-# Copy the environment template
+# Copy environment template
 cp .env.example .env
 ```
 
 ### Environment Variables
 
-Open `.env` and fill in your values:
+Fill in your `.env` file:
 
 ```bash
-# Server
-PORT=3000
 NODE_ENV=development
+PORT=3000
 
-# Database
+# Supabase connection string
+DATABASE_URL=postgresql://postgres:password@host:5432/postgres
+
+# Local development fallback
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=leave_management
 DB_USER=postgres
-DB_PASSWORD=your_postgres_password
+DB_PASSWORD=your_password
 
-# JWT — use a long random string
-JWT_SECRET=your_super_secret_key_here
+# JWT
+JWT_SECRET=your_long_random_secret
 JWT_EXPIRES_IN=7d
 
-# App URL — frontend URL for email links
+# Frontend URL for email links
 APP_URL=http://localhost:5173
 
-# Email — Gmail with App Password
+# Gmail + App Password
 EMAIL_FROM=your.gmail@gmail.com
-EMAIL_PASSWORD=your_16_char_app_password
+EMAIL_PASSWORD=your16charapppassword
 EMAIL_FROM_NAME=LeaveSync
 ```
 
 ### Database Setup
 
 ```bash
-# Create the database
-psql -U postgres -c "CREATE DATABASE leave_management;"
-
-# Run all migrations to create tables
+# Run all migrations
 npm run migrate
 ```
 
-### Run the Server
+### Run Locally
 
 ```bash
-# Development — auto-restarts on file save
+# Development with auto-restart
 npm run dev
 
 # Production
 npm start
 ```
 
-Visit `http://localhost:3000/api/health` to confirm the server is running.
-
----
-
-## 🗄️ Database Schema
-
-| Table | Description |
-|---|---|
-| `companies` | Tenant accounts — one row per company |
-| `users` | All employees, managers, HR admins |
-| `leave_types` | Annual, Sick, Study etc. per company |
-| `leave_balances` | Days entitled/used/remaining per employee per year |
-| `leave_requests` | All leave applications and their status |
-| `public_holidays` | SA public holidays per company |
-| `notifications` | In-app notification feed |
-| `audit_logs` | POPIA-compliant action history |
-| `leave_policies` | Role-based entitlement rules |
-| `role_requests` | Self-service promotion requests |
-| `password_reset_tokens` | Secure one-time reset tokens |
+Visit `http://localhost:3000/api/health` to confirm it is running.
 
 ---
 
 ## 🔐 User Roles
 
-| Role | Permissions |
+| Role | Description |
 |---|---|
-| `employee` | Own leave requests and balances only |
-| `manager` | Approve/reject team leave, view team reports |
-| `hr_admin` | Full staff management, policies, company reports |
-| `super_admin` | Everything including company settings and billing |
+| `employee` | Submit and view own leave only |
+| `manager` | Approve team leave, view team reports |
+| `hr_admin` | Full staff management, policies, reports |
+| `super_admin` | Everything including billing and settings |
 
 ---
 
-## 📡 API Endpoints
+## 📡 Key API Endpoints
 
-### Authentication
+POST   /api/auth/register           Register company + admin
+POST   /api/auth/login              Login
+GET    /api/auth/me                 Get own profile
+POST   /api/auth/forgot-password    Request password reset
+POST   /api/auth/reset-password     Reset password
+GET    /api/employees               List employees
+POST   /api/employees               Add employee
+PUT    /api/employees/:id           Update employee
+POST   /api/leave-requests          Submit leave request
+GET    /api/leave-requests/pending  Pending approvals
+PUT    /api/leave-requests/:id/approve    Manager approve
+PUT    /api/leave-requests/:id/hr-approve HR final approve
+PUT    /api/leave-requests/:id/reject     Reject request
+GET    /api/reports/summary         Company summary
+GET    /api/audit                   Audit trail
+GET    /api/billing/plans           Subscription plans
+POST   /api/billing/initiate        Start payment
+POST   /api/billing/webhook         PayFast ITN webhook
 
-POST   /api/auth/register          Register company + admin
-POST   /api/auth/login             Login → JWT token
-GET    /api/auth/me                Get own profile
-POST   /api/auth/forgot-password   Request reset email
-POST   /api/auth/reset-password    Reset with token
+---
 
-### Employees
+## 🗄️ Database Schema
 
-POST   /api/employees              Add employee
-GET    /api/employees              List employees
-GET    /api/employees/:id          Get employee
-PUT    /api/employees/:id          Update employee
-PUT    /api/employees/:id/reactivate  Reactivate
-DELETE /api/employees/:id          Deactivate
+| Table | Purpose |
+|---|---|
+| `companies` | Multi-tenant company accounts |
+| `users` | All employees across all companies |
+| `leave_types` | Annual, Sick, Study etc. |
+| `leave_balances` | Days entitled/used/remaining per year |
+| `leave_requests` | All leave applications |
+| `public_holidays` | SA public holidays per company |
+| `notifications` | In-app notification feed |
+| `audit_logs` | POPIA-compliant action history |
+| `leave_policies` | Role-based entitlement rules |
+| `role_requests` | Self-service promotion requests |
+| `password_reset_tokens` | Secure reset tokens |
+| `subscriptions` | PayFast billing records |
 
-### Leave Requests
+---
 
-POST   /api/leave-requests              Submit request
-GET    /api/leave-requests/my           Own requests
-GET    /api/leave-requests/pending      Pending approvals
-GET    /api/leave-requests/calendar     Leave calendar
-PUT    /api/leave-requests/:id/approve  Approve (manager)
-PUT    /api/leave-requests/:id/hr-approve  HR final approval
-PUT    /api/leave-requests/:id/reject   Reject with reason
-PUT    /api/leave-requests/:id/cancel   Cancel own request
+## 🚀 Deployment
 
-### Reports
+| Platform | Service | Purpose |
+|---|---|---|
+| Render | Web Service | Hosts the Node.js API |
+| Supabase | PostgreSQL | Hosts the database |
+| Vercel | Static Site | Hosts the React frontend |
 
-GET    /api/reports/summary        Company leave summary
-GET    /api/reports/team           Team overview
-GET    /api/reports/absenteeism    Absenteeism report
-GET    /api/reports/upcoming       Upcoming leave
-GET    /api/reports/employee/:id   Employee history
-
-*See `GET /api` for the complete list of all 45+ endpoints.*
+**Auto-deploy:** Every push to `main` triggers automatic redeployment on Render.
 
 ---
 
@@ -253,27 +263,10 @@ GET    /api/reports/employee/:id   Employee history
 - JWT tokens with 7-day expiry
 - bcrypt password hashing — 12 salt rounds
 - Helmet.js HTTP security headers
-- Rate limiting — 100 req/15min general, 10 req/15min on auth
-- CORS configured per environment
-- Multi-tenant isolation — every query scoped by `company_id`
-- Password reset tokens hashed before storage, expire in 1 hour
-- Audit logging for all sensitive actions (POPIA compliant)
-
----
-
-## 🧪 Running Tests
-
-All API endpoints have been manually tested using Thunder Client. Run the server and use the included test credentials:
-
-Company:  Acme Corp (subdomain: acme)
-Admin:    odwa@acme.com / Password123  (super_admin)
-Employee: thabo@acme.com / Password123 (employee)
-
----
-
-## 📄 License
-
-MIT License — free to use, modify and distribute.
+- Rate limiting on all routes
+- Trust proxy configured for Render
+- Multi-tenant isolation via `company_id`
+- POPIA-compliant audit logging
 
 ---
 
@@ -281,4 +274,14 @@ MIT License — free to use, modify and distribute.
 
 **Odwa Dyantyi**
 Master's in Information Systems — University of the Western Cape
+IT Educator | Full-Stack Developer | SaaS Builder
 
+---
+
+## 📄 License
+
+MIT License
+
+Autho:
+
+Odwa Dyantyi
