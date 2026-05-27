@@ -16,6 +16,10 @@ const {
   reactivateEmployee,
 } = require('../controllers/employeeController');
 
+const {
+  checkEmployeeLimit,
+} = require('../middleware/planLimits');
+
 // Import auth middleware
 const { authenticate, authorize } = require('../middleware/auth');
 
@@ -25,9 +29,11 @@ router.use(authenticate);
 
 // ── POST /api/employees ────────────────────────────────
 // Add a new employee — hr_admin and super_admin only
+// Check plan limits before allowing new employee
 router.post(
   '/',
   authorize('hr_admin', 'super_admin'),
+  checkEmployeeLimit,
   addEmployee
 );
 

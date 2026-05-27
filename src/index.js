@@ -5,6 +5,8 @@ require('dotenv').config();
 // ─── IMPORTS ──────────────────────────────────────────
 const express = require('express');
 
+const billingRoutes = require('./routes/billingRoutes');
+
 // Database
 const { pool } = require('./config/db');
 // Import email verifier
@@ -80,6 +82,9 @@ app.use(express.json());
 // Parse URL-encoded form data
 app.use(express.urlencoded({ extended: true }));
 
+
+
+
 // ─── HEALTH CHECK ─────────────────────────────────────
 // Quick endpoint to confirm server and DB are running
 app.get('/api/health', async (req, res) => {
@@ -122,6 +127,8 @@ app.use('/api/leave-policies', leavePolicyRoutes);
 app.use('/api/role-requests',  roleRequestRoutes);
 
 app.use('/api/company', companyRoutes);
+
+app.use('/api/billing', billingRoutes);
 
 // ─── ERROR HANDLERS ───────────────────────────────────
 // 404 — must be AFTER all routes
