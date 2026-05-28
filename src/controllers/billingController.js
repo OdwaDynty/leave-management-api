@@ -88,49 +88,64 @@ const PLANS = {
 };
 
 // ─── GENERATE PAYFAST SIGNATURE ───────────────────────
-// PayFast requires every request to be signed with MD5
-// This proves the request came from us and was not
-// tampered with by anyone in between
+// Generates MD5 signature exactly as PayFast expects
 //
-// Process:
-//   1. Sort all parameters alphabetically by key name
-//   2. Build a URL query string from them
-//   3. Append the passphrase at the end
-//   4. MD5 hash the entire string
-const generateSignature = (data, passphrase) => {
-  // Step 1: Get all keys and sort them A-Z
-  const sortedKeys = Object.keys(data).sort();
-
-  // Step 2: Build query string
-  // Only include keys that have a value
-  // Encode values the same way PayFast does
-  const queryString = sortedKeys
-    .filter(key =>
-      data[key] !== '' &&
+// IMPORTANT NOTES:
+//   1. Parameters must be sorted alphabetically
+//   2. Empty values must be excluded
+//   3. Values encoded with urlencode not rawurlencode
+//   4. Passphrase appended AFTER all other params
+//   5. The signature itself is NOT included in signing
+const generateSignature = (data, passphrase = null) => {
+  // Step 1: Remove empty, null, undefined values
+  // and remove signature if it exists
+  const cleanData = {};
+  Object.keys(data).forEach(key => {
+    if (
+      key !== 'signature' &&
       data[key] !== null &&
-      data[key] !== undefined
-    )
-    .map(key =>
-      `${key}=${encodeURIComponent(
-        String(data[key])
-      ).replace(/%20/g, '+')}`
-    )
+      data[key] !== undefined &&
+      data[key] !== ''
+    ) {
+      cleanData[key] = data[key];
+    }
+  });
+
+  // Step 2: Sort keys alphabetically
+  const sortedKeys = Object.keys(cleanData).sort();
+
+  // Step 3: Build the parameter string
+  // PayFast uses PHP urlencode which encodes spaces as +
+  const paramString = sortedKeys
+    .map(key => {
+      const value = String(cleanData[key]);
+      // PHP urlencode equivalent in JavaScript
+      const encoded = encodeURIComponent(value)
+        .replace(/%20/g, '+')   // spaces become +
+        .replace(/!/g, '%21')
+        .replace(/'/g, '%27')
+        .replace(/\(/g, '%28')
+        .replace(/\)/g, '%29')
+        .replace(/\*/g, '%2A');
+      return `${key}=${encoded}`;
+    })
     .join('&');
 
-  // Step 3: Append passphrase if one is set
-  // The passphrase adds an extra layer of security
+  // Step 4: Append passphrase if provided
+  // The passphrase is appended as a raw string
+  // NOT encoded like the other parameters
   const stringToHash = passphrase
-    ? `${queryString}&passphrase=${encodeURIComponent(
-        passphrase
-      ).replace(/%20/g, '+')}`
-    : queryString;
+    ? `${paramString}&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, '+')}`
+    : paramString;
 
-  // Step 4: Create MD5 hash
+  // Step 5: MD5 hash the final string
   return crypto
     .createHash('md5')
     .update(stringToHash)
     .digest('hex');
 };
+
+
 
 // ─── GET PLANS ────────────────────────────────────────
 // GET /api/billing/plans
