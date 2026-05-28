@@ -369,10 +369,11 @@ const initiatePayment = async (req, res) => {
       custom_str3: req.user.id,         // user ID
     };
 
-    // Generate the signature for this payment
+    // Only use passphrase if it is set in environment
+    // If PayFast account has no passphrase set this to null
     const signature = generateSignature(
-      paymentData,
-      process.env.PAYFAST_PASSPHRASE
+    paymentData,
+    process.env.PAYFAST_PASSPHRASE || null
     );
 
     // Return everything the frontend needs
