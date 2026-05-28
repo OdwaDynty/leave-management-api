@@ -5,8 +5,6 @@ require('dotenv').config();
 // ─── IMPORTS ──────────────────────────────────────────
 const express = require('express');
 
-const billingRoutes = require('./routes/billingRoutes');
-
 // Database
 const { pool } = require('./config/db');
 // Import email verifier
@@ -40,8 +38,9 @@ const publicHolidayRoutes = require('./routes/publicHolidayRoutes');
 const auditRoutes       = require('./routes/auditRoutes');
 const leavePolicyRoutes = require('./routes/leavePolicyRoutes');
 const roleRequestRoutes = require('./routes/roleRequestRoutes');
-
 const companyRoutes = require('./routes/companyRoutes');
+// Billing and PayFast subscription routes
+const billingRoutes = require('./routes/billingRoutes');
 
 
 // ─── INITIALISE EXPRESS ───────────────────────────────
@@ -125,9 +124,8 @@ app.use('/api/public-holidays', publicHolidayRoutes);
 app.use('/api/audit',          auditRoutes);
 app.use('/api/leave-policies', leavePolicyRoutes);
 app.use('/api/role-requests',  roleRequestRoutes);
-
 app.use('/api/company', companyRoutes);
-
+// Billing routes — PayFast plans and subscriptions
 app.use('/api/billing', billingRoutes);
 
 // ─── ERROR HANDLERS ───────────────────────────────────
