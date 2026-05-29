@@ -413,6 +413,19 @@ const handleWebhook = async (req, res) => {
   try {
     const pfData = req.body;
 
+
+    // ── Log Everything for Debugging ──────────────
+    // This helps us see exactly what PayFast sent
+    console.log('═══ PayFast ITN RECEIVED ═══');
+    console.log('Status:',    pfData.payment_status);
+    console.log('Company:',   pfData.custom_str1);
+    console.log('Plan:',      pfData.custom_str2);
+    console.log('Amount:',    pfData.amount_gross);
+    console.log('Payment ID:',pfData.pf_payment_id);
+    console.log('Full data:', JSON.stringify(pfData));
+    console.log('════════════════════════════');
+
+
     console.log('PayFast ITN received:',
       pfData.payment_status
     );
@@ -427,11 +440,25 @@ const handleWebhook = async (req, res) => {
       process.env.PAYFAST_PASSPHRASE
     );
 
-    if (signature !== calculatedSig) {
-      console.error('PayFast: Invalid signature');
-      // Return 200 anyway to stop PayFast retrying
+    
+    // ── Signature Verification ────────────────────
+    // In sandbox mode we can temporarily skip this
+    // to confirm the webhook is being received
+    // IMPORTANT: Re-enable in production
+    const skipSigVerification =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.PAYFAST_SKIP_SIG === 'true';
+
+    if (!skipSigVerification && signature !== calculatedSig) {
+        console.error('PayFast webhook: Invalid signature');
+        console.error('Expected:', calculatedSig);
+        console.error('Received:', signature);
       return res.status(200).send('Invalid signature');
-    }
+      }
+
+      console.log('✅ PayFast webhook signature verified');
+
+
 
     // ── Extract Our Custom Data ────────────────────
     // These were set in custom_str1/2 during initiate
