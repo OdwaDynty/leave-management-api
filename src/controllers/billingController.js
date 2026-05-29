@@ -425,9 +425,12 @@ const handleWebhook = async (req, res) => {
     console.log('  Token:     ', pfData.token);
     console.log('═══════════════════════════════════');
 
-    const companyId = pfData.custom_str1;
-    const plan      = pfData.custom_str2;
-    const status    = pfData.payment_status;
+   // Trim whitespace and newlines from all values
+  // PowerShell and some HTTP clients add trailing newlines
+  // PostgreSQL rejects UUIDs with whitespace
+    const companyId = pfData.custom_str1?.toString().trim();
+    const plan      = pfData.custom_str2?.toString().trim();
+    const status    = pfData.payment_status?.toString().trim();
 
     // ── Validate Required Fields ──────────────────
     if (!companyId || !plan || !status) {
