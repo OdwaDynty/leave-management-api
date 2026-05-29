@@ -397,119 +397,119 @@ const initiatePayment = async (req, res) => {
 // ─── PAYFAST WEBHOOK (ITN) ────────────────────────────
 // POST /api/billing/webhook
 // PayFast calls this after every payment event
-// ITN = Instant Transaction Notification
-//
-// IMPORTANT:
-//   This endpoint receives data from PayFast servers
-//   It must be publicly accessible (no auth required)
-//   It must return 200 OK quickly
-//   PayFast will retry if it does not get 200
-//
-// SECURITY CHECKS:
-//   1. Verify the signature matches
-//   2. Verify the amount is correct
-//   3. Check payment_status is COMPLETE
+// This is the ONLY place where the database gets updated
+// The return_url success page does NOT update the database
+// Only this webhook does
 const handleWebhook = async (req, res) => {
+  // Always respond 200 immediately
+  // PayFast requires a response within 10 seconds
+  // If we wait too long PayFast marks it as failed
+  // and stops retrying
+  res.status(200).send('OK');
+
+  // Now process the webhook asynchronously
+  // The response was already sent above
   try {
     const pfData = req.body;
 
+    // ── Log Everything ────────────────────────────
+    console.log('');
+    console.log('═══════════════════════════════════');
+    console.log('  PayFast ITN Webhook Received');
+    console.log('═══════════════════════════════════');
+    console.log('  Status:    ', pfData.payment_status);
+    console.log('  Company:   ', pfData.custom_str1);
+    console.log('  Plan:      ', pfData.custom_str2);
+    console.log('  Amount:    ', pfData.amount_gross);
+    console.log('  Payment ID:', pfData.pf_payment_id);
+    console.log('  Token:     ', pfData.token);
+    console.log('═══════════════════════════════════');
 
-    // ── Log Everything for Debugging ──────────────
-    // This helps us see exactly what PayFast sent
-    console.log('═══ PayFast ITN RECEIVED ═══');
-    console.log('Status:',    pfData.payment_status);
-    console.log('Company:',   pfData.custom_str1);
-    console.log('Plan:',      pfData.custom_str2);
-    console.log('Amount:',    pfData.amount_gross);
-    console.log('Payment ID:',pfData.pf_payment_id);
-    console.log('Full data:', JSON.stringify(pfData));
-    console.log('════════════════════════════');
-
-
-    console.log('PayFast ITN received:',
-      pfData.payment_status
-    );
-
-    // ── Security Check: Verify Signature ──────────
-    // Remove the signature from the data before
-    // recalculating — we compare separately
-    const { signature, ...dataWithoutSig } = pfData;
-
-    const calculatedSig = generateSignature(
-      dataWithoutSig,
-      process.env.PAYFAST_PASSPHRASE
-    );
-
-    
-    // ── Signature Verification ────────────────────
-    // In sandbox mode we can temporarily skip this
-    // to confirm the webhook is being received
-    // IMPORTANT: Re-enable in production
-    const skipSigVerification =
-    process.env.NODE_ENV !== 'production' ||
-    process.env.PAYFAST_SKIP_SIG === 'true';
-
-    if (!skipSigVerification && signature !== calculatedSig) {
-        console.error('PayFast webhook: Invalid signature');
-        console.error('Expected:', calculatedSig);
-        console.error('Received:', signature);
-      return res.status(200).send('Invalid signature');
-      }
-
-      console.log('✅ PayFast webhook signature verified');
-
-
-
-    // ── Extract Our Custom Data ────────────────────
-    // These were set in custom_str1/2 during initiate
     const companyId = pfData.custom_str1;
     const plan      = pfData.custom_str2;
     const status    = pfData.payment_status;
 
-    if (!companyId || !plan) {
-      console.error('PayFast: Missing company/plan data');
-      return res.status(200).send('Missing data');
+    // ── Validate Required Fields ──────────────────
+    if (!companyId || !plan || !status) {
+      console.error('PayFast webhook: Missing required fields');
+      console.error('Body received:', JSON.stringify(pfData));
+      return;
     }
 
-    // ── Handle Payment Complete ────────────────────
+    // ── Skip Signature Verification in Sandbox ────
+    // PAYFAST_SKIP_SIG=true bypasses this for testing
+    // Remove this bypass before going to production
+    const skipSig = process.env.PAYFAST_SKIP_SIG === 'true';
+
+    if (!skipSig) {
+      const { signature, ...dataWithoutSig } = pfData;
+      const calculatedSig = generateSignature(
+        dataWithoutSig,
+        process.env.PAYFAST_PASSPHRASE || null
+      );
+
+      if (signature !== calculatedSig) {
+        console.error('PayFast webhook: Signature mismatch');
+        console.error('Expected:', calculatedSig);
+        console.error('Received:', signature);
+        return;
+      }
+      console.log('✅ Signature verified');
+    } else {
+      console.log('⚠️  Signature check skipped (sandbox mode)');
+    }
+
+    // ── Process Payment Complete ───────────────────
     if (status === 'COMPLETE') {
       const selectedPlan = PLANS[plan];
 
       if (!selectedPlan) {
-        console.error('PayFast: Unknown plan:', plan);
-        return res.status(200).send('Unknown plan');
+        console.error(`PayFast webhook: Unknown plan "${plan}"`);
+        return;
       }
 
-      // Calculate billing period
-      // Subscription runs for exactly one month
+      console.log(`Processing upgrade to ${plan}...`);
+
+      // Calculate billing period dates
       const now       = new Date();
       const periodEnd = new Date(now);
       periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-      // Update the subscription in the database
+      // ── Update Subscriptions Table ─────────────
       // ON CONFLICT handles both new and existing records
+      // This is the critical update that was failing
       await query(
         `INSERT INTO subscriptions (
-           id, company_id, plan, status,
-           max_employees, price_cents,
-           payfast_token, payfast_payment_id,
+           id,
+           company_id,
+           plan,
+           status,
+           max_employees,
+           price_cents,
+           payfast_token,
+           payfast_payment_id,
            current_period_start,
            current_period_end,
-           created_at, updated_at
+           created_at,
+           updated_at
          )
          VALUES (
-           $1,$2,$3,'active',$4,$5,$6,$7,$8,$9,
-           NOW(),NOW()
+           $1, $2, $3, 'active',
+           $4, $5, $6, $7,
+           $8, $9,
+           NOW(), NOW()
          )
-         ON CONFLICT (company_id) DO UPDATE SET
-           plan                 = $3,
+         ON CONFLICT (company_id)
+         DO UPDATE SET
+           plan                 = EXCLUDED.plan,
            status               = 'active',
-           max_employees        = $4,
-           price_cents          = $5,
-           payfast_token        = $6,
-           payfast_payment_id   = $7,
-           current_period_start = $8,
-           current_period_end   = $9,
+           max_employees        = EXCLUDED.max_employees,
+           price_cents          = EXCLUDED.price_cents,
+           payfast_token        = EXCLUDED.payfast_token,
+           payfast_payment_id   = EXCLUDED.payfast_payment_id,
+           current_period_start = EXCLUDED.current_period_start,
+           current_period_end   = EXCLUDED.current_period_end,
+           cancelled_at         = NULL,
            updated_at           = NOW()`,
         [
           uuidv4(),
@@ -517,29 +517,31 @@ const handleWebhook = async (req, res) => {
           plan,
           selectedPlan.max_employees,
           selectedPlan.price_cents,
-          pfData.token         || null,
-          pfData.pf_payment_id || null,
+          pfData.token           || null,
+          pfData.pf_payment_id   || null,
           now.toISOString(),
           periodEnd.toISOString(),
         ]
       );
 
-      // Also update the plan in the companies table
-      // This is what the rest of the app uses
+      console.log('✅ subscriptions table updated');
+
+      // ── Update Companies Table ──────────────────
+      // This is what the rest of the app reads
+      // for plan checks and limits
       await query(
         `UPDATE companies
-         SET plan = $1, updated_at = NOW()
+         SET plan       = $1,
+             updated_at = NOW()
          WHERE id = $2`,
         [plan, companyId]
       );
 
-      console.log(
-        `✅ PayFast: ${companyId} upgraded to ${plan}`
-      );
+      console.log('✅ companies table updated');
+      console.log(`🎉 ${companyId} upgraded to ${plan}`);
 
-    // ── Handle Payment Cancelled ───────────────────
+    // ── Process Cancellation ───────────────────────
     } else if (status === 'CANCELLED') {
-      // Revert to free plan
       await query(
         `UPDATE subscriptions
          SET plan          = 'free',
@@ -554,25 +556,28 @@ const handleWebhook = async (req, res) => {
 
       await query(
         `UPDATE companies
-         SET plan = 'free', updated_at = NOW()
+         SET plan       = 'free',
+             updated_at = NOW()
          WHERE id = $1`,
         [companyId]
       );
 
-      console.log(
-        `ℹ️  PayFast: ${companyId} cancelled — on free plan`
-      );
+      console.log(`ℹ️  ${companyId} downgraded to free`);
+
+    } else {
+      // Other statuses: FAILED, PENDING etc.
+      console.log(`ℹ️  PayFast status: ${status} — no action taken`);
     }
 
-    // Always return 200 to acknowledge receipt
-    return res.status(200).send('OK');
-
   } catch (err) {
-    console.error('Webhook error:', err.message);
-    // Return 200 even on error to stop PayFast retrying
-    return res.status(200).send('OK');
+    // Log but do not crash — response already sent
+    console.error('PayFast webhook processing error:');
+    console.error(err.message);
+    console.error(err.stack);
   }
 };
+
+
 
 // ─── CANCEL SUBSCRIPTION ──────────────────────────────
 // POST /api/billing/cancel
